@@ -232,12 +232,12 @@ def email_convert(email, name):
 
 def emails_convert(emails):
     ret = []
-    if isinstance(emails, list):
-        for email in emails:
-            if email != "github-bugzilla@puremagic.com":
-                ret.append(email_convert(email, None))
-    else:
-        ret.append(email_convert(emails, None))
+    if not isinstance(emails, list):
+        emails = [emails]
+
+    for email in emails:
+        if email != "github-bugzilla@puremagic.com" or email != "bugzilla@digitalmars.com":
+            ret.append(email_convert(email, None))
 
     return ret
 
@@ -450,9 +450,6 @@ def github_get(url, avs = {}):
     else:
         u = "%s/repos/%s/%s/%s" % (github_url, github_owner, github_repo, url)
 
-    # TODO: debug
-    # print "GET: " + u
-
     avs["access_token"] = github_token
     return requests.get(u, params = avs)
 
@@ -473,10 +470,6 @@ def github_post(url, avs = {}, fields = []):
             print("Error posting filed %s to %s" % (field, url))
             exit(1)
         d[field] = avs[field]
-
-    # TODO: debug
-    # print "POST: " + u
-    # print "DATA: " + json.dumps(d)
 
     if force_update:
         return requests.post(u, params = { "access_token": github_token },
@@ -534,22 +527,6 @@ def github_assignees_check(issues):
             print("Assignee '%s' exists" % assignee)
 
 
-def github_issue_exist(number):
-    if github_get("issues/%d" % number):
-        return True
-    else:
-        return False
-
-
-def github_issue_get(number):
-    req = github_get("issues/%d" % number)
-    if not req:
-        print("Error getting GitHub issue #%d: %s" % (number, req.headers))
-        exit(1)
-
-    return req.json()
-
-
 def github_issue_append(bugzilla_id, issue):
     global github_owner, github_repo, github_token
     params = { "access_token": github_token }
@@ -557,9 +534,6 @@ def github_issue_append(bugzilla_id, issue):
     print("\timporting BZ#%d on GitHub..." % bugzilla_id)
     u = "https://api.github.com/repos/%s/%s/import/issues" % (github_owner, github_repo)
     comments = issue.pop("comments", [])
-    # We can't assign people which are not in the organization / collaborators on the repo
-    # if github_owner != "dlang":
-        # issue.pop("assignee", None)
     r = requests.post(u, params = params, headers = headers,
                       data = json.dumps({ "issue": issue, "comments": comments }))
     if not r:
@@ -622,10 +596,10 @@ def args_parse(argv):
             xml_file = arg
 
     # Check the arguments
-    # if (not xml_file or not github_owner or not github_repo or not github_token):
-        # print("Error parsing arguments: "
-                # "please specify XML file, GitHub owner, repo and token")
-        # usage()
+    if (not xml_file or not github_owner or not github_repo or not github_token):
+        print("Error parsing arguments: "
+                "please specify XML file, GitHub owner, repo and token")
+        usage()
 
 
 def main(argv):
@@ -652,21 +626,6 @@ def main(argv):
     except IOError:
         print("===> No log file found. Not skipping any issue.")
 
-    # print("===> Checking last existing issue actually exists.")
-    # if not github_issue_exist(existingIssues):
-        # print("Last existing issue doesn't actually exist. Aborting!")
-        # exit(1)
-    # print("===> Checking whether the following issue was created but not saved.")
-    # github_issue = github_get("issues/%d" % (existingIssues + 1))
-    # if github_issue:
-        # result = re.search("Original bug ID: BZ#(\d+)", github_issue.json()["body"])
-        # if result:
-            # print("Indeed, this was the case.")
-            # bugzilla_id = int(result.group(1))
-            # issues.pop(bugzilla_id, None)
-            # with open("bugzilla2github.log", "a") as f:
-                # f.write("%d, %d\n" % (bugzilla_id, existingIssues + 1))
-
     # TODO: re-enable
     # print("===> Checking all the labels exist on GitHub...")
     # github_labels_check(issues)
@@ -681,11 +640,11 @@ def main(argv):
     # print(len(vals))
     # print(json.dumps(vals[0][1], indent=4))
     # return
-
     # issues_filtered = {17044: issues[17044]}
 
-    # print("===> Adding Bugzilla reports on GitHub...")
-    github_issues_add(issues)
+    if force_update:
+        print("===> Adding Bugzilla reports on GitHub...")
+        github_issues_add(issues)
 
 
 if __name__ == "__main__":
